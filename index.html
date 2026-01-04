@@ -44,6 +44,20 @@
             align-items: center;
         }
 
+        .session-timer {
+            background: #f7fafc;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #4a5568;
+        }
+
+        .session-timer.warning {
+            background: #fed7d7;
+            color: #742a2a;
+            font-weight: bold;
+        }
+
         .btn {
             padding: 10px 20px;
             border: none;
@@ -218,6 +232,7 @@
         <div class="header">
             <h1>🎓 Student Portal</h1>
             <div class="user-info">
+                <span id="sessionTimer" class="session-timer hidden"></span>
                 <span id="userDisplay" class="hidden"></span>
                 <button id="logoutBtn" class="btn btn-danger hidden">Logout</button>
             </div>
@@ -338,12 +353,121 @@
 
     <script>
         const API_URL = 'http://localhost:3000/api';
-        let token = localStorage.getItem('token');
+        let token = sessionStorage.getItem('token'); // Changed to sessionStorage
         let currentUser = null;
+        
+        // Session Management Variables
+        const SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes in milliseconds
+        const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutes in milliseconds
+        let sessionTimer = null;
+        let inactivityTimer = null;
+        let sessionStartTime = null;
+        let displayTimer = null;
 
         // Check if user is logged in
         if (token) {
-            loadUserProfile();
+            const loginTime = sessionStorage.getItem('loginTime');
+            const currentTime = new Date().getTime();
+            
+            // Check if session has expired
+            if (loginTime && (currentTime - parseInt(loginTime)) > SESSION_TIMEOUT) {
+                showAlert('Session expired. Please login again.', 'error');
+                clearSession();
+            } else {
+                loadUserProfile();
+            }
+        }
+
+        // Activity Detection - Reset inactivity timer on user interaction
+        const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+        activityEvents.forEach(event => {
+            document.addEventListener(event, resetInactivityTimer);
+        });
+
+        function startSessionTimers() {
+            sessionStartTime = new Date().getTime();
+            sessionStorage.setItem('loginTime', sessionStartTime.toString());
+            
+            // Clear any existing timers
+            clearAllTimers();
+            
+            // Set session timeout (15 minutes)
+            sessionTimer = setTimeout(() => {
+                showAlert('Your session has expired. Please login again.', 'error');
+                performLogout();
+            }, SESSION_TIMEOUT);
+            
+            // Set initial inactivity timer (3 minutes)
+            resetInactivityTimer();
+            
+            // Update display timer every second
+            updateSessionDisplay();
+            displayTimer = setInterval(updateSessionDisplay, 1000);
+        }
+
+        function resetInactivityTimer() {
+            // Clear existing inactivity timer
+            if (inactivityTimer) {
+                clearTimeout(inactivityTimer);
+            }
+            
+            // Only set new timer if user is logged in
+            if (token && sessionStartTime) {
+                inactivityTimer = setTimeout(() => {
+                    showAlert('You have been logged out due to inactivity.', 'error');
+                    performLogout();
+                }, INACTIVITY_TIMEOUT);
+            }
+        }
+
+        function updateSessionDisplay() {
+            if (!sessionStartTime) return;
+            
+            const currentTime = new Date().getTime();
+            const elapsedTime = currentTime - sessionStartTime;
+            const remainingTime = SESSION_TIMEOUT - elapsedTime;
+            
+            if (remainingTime <= 0) {
+                document.getElementById('sessionTimer').textContent = 'Session Expired';
+                return;
+            }
+            
+            const minutes = Math.floor(remainingTime / 60000);
+            const seconds = Math.floor((remainingTime % 60000) / 1000);
+            
+            const timerElement = document.getElementById('sessionTimer');
+            timerElement.textContent = `Session: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            // Warning when less than 2 minutes remaining
+            if (remainingTime < 120000) {
+                timerElement.classList.add('warning');
+            } else {
+                timerElement.classList.remove('warning');
+            }
+        }
+
+        function clearAllTimers() {
+            if (sessionTimer) clearTimeout(sessionTimer);
+            if (inactivityTimer) clearTimeout(inactivityTimer);
+            if (displayTimer) clearInterval(displayTimer);
+        }
+
+        function clearSession() {
+            sessionStorage.removeItem('token');
+            sessionStorage.removeItem('loginTime');
+            token = null;
+            currentUser = null;
+            sessionStartTime = null;
+            clearAllTimers();
+        }
+
+        function performLogout() {
+            clearSession();
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('portalSection').classList.add('hidden');
+            document.getElementById('userDisplay').classList.add('hidden');
+            document.getElementById('logoutBtn').classList.add('hidden');
+            document.getElementById('sessionTimer').classList.add('hidden');
         }
 
         // Auth Functions
@@ -382,10 +506,11 @@
 
                 if (response.ok) {
                     token = data.token;
-                    localStorage.setItem('token', token);
+                    sessionStorage.setItem('token', token); // Changed to sessionStorage
                     currentUser = data.student;
                     showAlert('Login successful!', 'success');
                     showPortal();
+                    startSessionTimers(); // Start session timers
                 } else {
                     showAlert(data.error || 'Login failed', 'error');
                 }
@@ -413,10 +538,11 @@
 
                 if (response.ok) {
                     token = data.token;
-                    localStorage.setItem('token', token);
+                    sessionStorage.setItem('token', token); // Changed to sessionStorage
                     currentUser = data.student;
                     showAlert('Registration successful!', 'success');
                     showPortal();
+                    startSessionTimers(); // Start session timers
                 } else {
                     showAlert(data.error || 'Registration failed', 'error');
                 }
@@ -427,13 +553,7 @@
 
         // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => {
-            localStorage.removeItem('token');
-            token = null;
-            currentUser = null;
-            document.getElementById('authSection').classList.remove('hidden');
-            document.getElementById('portalSection').classList.add('hidden');
-            document.getElementById('userDisplay').classList.add('hidden');
-            document.getElementById('logoutBtn').classList.add('hidden');
+            performLogout();
             showAlert('Logged out successfully', 'success');
         });
 
@@ -447,8 +567,9 @@
                 if (response.ok) {
                     currentUser = await response.json();
                     showPortal();
+                    startSessionTimers(); // Start session timers
                 } else {
-                    localStorage.removeItem('token');
+                    clearSession();
                     token = null;
                 }
             } catch (error) {
@@ -461,6 +582,7 @@
             document.getElementById('portalSection').classList.remove('hidden');
             document.getElementById('userDisplay').classList.remove('hidden');
             document.getElementById('logoutBtn').classList.remove('hidden');
+            document.getElementById('sessionTimer').classList.remove('hidden');
             document.getElementById('userDisplay').textContent = `Welcome, ${currentUser.name}`;
             
             loadCourses();
@@ -701,6 +823,12 @@
                 alert.remove();
             }, 5000);
         }
+
+        // Handle page close/refresh - logout automatically
+        window.addEventListener('beforeunload', () => {
+            // Session will be cleared automatically because we use sessionStorage
+            // which is automatically cleared when browser/tab is closed
+        });
     </script>
 </body>
 </html>
