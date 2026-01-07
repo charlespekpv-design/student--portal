@@ -246,7 +246,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎓 Student Portal</h1>
+            <h1> Student Portal</h1>
             <div class="user-info">
                 <span id="sessionTimer" class="session-timer hidden"></span>
                 <span id="userDisplay" class="hidden"></span>
@@ -627,7 +627,7 @@
                         <p><strong>Code:</strong> ${course.courseCode} | <strong>Credits:</strong> ${course.credits}</p>
                         <p><strong>Instructor:</strong> ${course.instructor}</p>
                         <p class="availability" style="color: ${statusColor};">
-                            ${isFull ? '❌ FULL' : `✅ ${availableSeats} seats available`}
+                            ${isFull ? 'FULL' : `${availableSeats} seats available`}
                         </p>
                     </div>
                 `;
