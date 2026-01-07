@@ -13,7 +13,7 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #981339 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -35,7 +35,7 @@
         }
 
         .header h1 {
-            color: #050b2b;
+            color: #667eea;
         }
 
         .user-info {
@@ -133,7 +133,7 @@
             padding: 10px;
             border: 1px solid #cbd5e0;
             border-radius: 5px;
-            font-size: 20px;
+            font-size: 14px;
         }
 
         .form-group textarea {
@@ -209,10 +209,26 @@
             border: 1px solid #fc8181;
         }
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .search-bar input {
+            flex: 1;
+            min-width: 250px;
+            padding: 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 5px;
+        }
+
+        .search-bar select {
+            padding: 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 5px;
+            min-width: 150px;
         }
 
         @media (max-width: 768px) {
@@ -230,7 +246,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1> Student Portal</h1>
+            <h1>🎓 Student Portal</h1>
             <div class="user-info">
                 <span id="sessionTimer" class="session-timer hidden"></span>
                 <span id="userDisplay" class="hidden"></span>
@@ -242,46 +258,86 @@
 
         <!-- Auth Section -->
         <div id="authSection">
-            <div class="card">
-                <h2>Login / Register</h2>
-                <div class="tabs">
-                    <button class="tab active" onclick="switchAuthTab('login')">Login</button>
-                    <button class="tab" onclick="switchAuthTab('register')">Register</button>
+            <div class="grid-2">
+                <!-- Public Course Search -->
+                <div class="card">
+                    <h2>🔍 Browse Available Courses</h2>
+                    <p style="color: #718096; margin-bottom: 15px;">Search and explore our course catalog. Login to enroll!</p>
+                    
+                    <div class="form-group">
+                        <input type="text" id="publicSearchInput" placeholder="Search courses by name, code, or instructor...">
+                    </div>
+                    
+                    <div class="grid-2" style="margin-bottom: 15px;">
+                        <div class="form-group">
+                            <select id="publicCreditFilter">
+                                <option value="">All Credits</option>
+                                <option value="1">1 Credit</option>
+                                <option value="2">2 Credits</option>
+                                <option value="3">3 Credits</option>
+                                <option value="4">4 Credits</option>
+                                <option value="5">5+ Credits</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <select id="publicAvailabilityFilter">
+                                <option value="">All Availability</option>
+                                <option value="available">Available</option>
+                                <option value="full">Full</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="btn btn-primary" onclick="searchPublicCourses()" style="flex: 1;">Search Courses</button>
+                        <button class="btn btn-secondary" onclick="clearPublicSearch()">Clear</button>
+                    </div>
+                    
+                    <div id="publicCoursesList" style="max-height: 500px; overflow-y: auto;"></div>
                 </div>
 
-                <!-- Login Form -->
-                <form id="loginForm">
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="loginEmail" required>
+                <!-- Login / Register -->
+                <div class="card">
+                    <h2>Login / Register</h2>
+                    <div class="tabs">
+                        <button class="tab active" onclick="switchAuthTab('login')">Login</button>
+                        <button class="tab" onclick="switchAuthTab('register')">Register</button>
                     </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="loginPassword" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Login</button>
-                </form>
 
-                <!-- Register Form -->
-                <form id="registerForm" class="hidden">
-                    <div class="form-group">
-                        <label>Full Name</label>
-                        <input type="text" id="registerName" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="registerEmail" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Student ID</label>
-                        <input type="text" id="registerStudentId" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="registerPassword" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Register</button>
-                </form>
+                    <!-- Login Form -->
+                    <form id="loginForm">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="loginEmail" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <input type="password" id="loginPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Login</button>
+                    </form>
+
+                    <!-- Register Form -->
+                    <form id="registerForm" class="hidden">
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <input type="text" id="registerName" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="registerEmail" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Student ID</label>
+                            <input type="text" id="registerStudentId" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <input type="password" id="registerPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Register</button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -303,6 +359,11 @@
             <!-- My Courses Tab -->
             <div id="myCoursesTab" class="card hidden">
                 <h2>My Enrolled Courses</h2>
+                <div class="search-bar">
+                    <input type="text" id="myCoursesSearchInput" placeholder="Search my courses...">
+                    <button class="btn btn-primary" onclick="searchMyCourses()">Search</button>
+                    <button class="btn btn-secondary" onclick="loadEnrolledCourses()">Clear</button>
+                </div>
                 <div id="enrolledCoursesList"></div>
             </div>
 
@@ -340,6 +401,11 @@
                 </form>
 
                 <h2 style="margin-top: 30px;">All Courses (Admin View)</h2>
+                <div class="search-bar">
+                    <input type="text" id="adminSearchInput" placeholder="Search courses...">
+                    <button class="btn btn-primary" onclick="searchAdminCourses()">Search</button>
+                    <button class="btn btn-secondary" onclick="loadAdminCourses()">Clear</button>
+                </div>
                 <div id="adminCoursesList"></div>
             </div>
 
@@ -489,6 +555,103 @@
             }
         }
 
+        // PUBLIC COURSE SEARCH (Before Login)
+        async function loadPublicCourses() {
+            try {
+                const response = await fetch(`${API_URL}/courses`);
+                const courses = await response.json();
+                displayPublicCourses(courses);
+            } catch (error) {
+                console.error('Error loading public courses:', error);
+                document.getElementById('publicCoursesList').innerHTML = 
+                    '<p style="color: #718096; text-align: center;">Unable to load courses. Please try again later.</p>';
+            }
+        }
+
+        async function searchPublicCourses() {
+            const searchText = document.getElementById('publicSearchInput').value.toLowerCase().trim();
+            const creditFilter = document.getElementById('publicCreditFilter').value;
+            const availabilityFilter = document.getElementById('publicAvailabilityFilter').value;
+
+            try {
+                const response = await fetch(`${API_URL}/courses`);
+                let courses = await response.json();
+
+                // Filter by search text
+                if (searchText) {
+                    courses = courses.filter(course => 
+                        course.courseName.toLowerCase().includes(searchText) ||
+                        course.courseCode.toLowerCase().includes(searchText) ||
+                        course.instructor.toLowerCase().includes(searchText) ||
+                        (course.description && course.description.toLowerCase().includes(searchText))
+                    );
+                }
+
+                // Filter by credits
+                if (creditFilter) {
+                    if (creditFilter === '5') {
+                        courses = courses.filter(course => course.credits >= 5);
+                    } else {
+                        courses = courses.filter(course => course.credits === parseInt(creditFilter));
+                    }
+                }
+
+                // Filter by availability
+                if (availabilityFilter) {
+                    if (availabilityFilter === 'available') {
+                        courses = courses.filter(course => 
+                            course.enrolledStudents.length < course.capacity
+                        );
+                    } else if (availabilityFilter === 'full') {
+                        courses = courses.filter(course => 
+                            course.enrolledStudents.length >= course.capacity
+                        );
+                    }
+                }
+
+                displayPublicCourses(courses);
+            } catch (error) {
+                showAlert('Error searching courses', 'error');
+            }
+        }
+
+        function clearPublicSearch() {
+            document.getElementById('publicSearchInput').value = '';
+            document.getElementById('publicCreditFilter').value = '';
+            document.getElementById('publicAvailabilityFilter').value = '';
+            loadPublicCourses();
+        }
+
+        function displayPublicCourses(courses) {
+            const container = document.getElementById('publicCoursesList');
+            
+            if (courses.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #718096;">
+                        <p>No courses found matching your criteria.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = courses.map(course => {
+                const availableSeats = course.capacity - course.enrolledStudents.length;
+                const isFull = availableSeats <= 0;
+                const statusColor = isFull ? '#f56565' : availableSeats <= 5 ? '#ed8936' : '#48bb78';
+                
+                return `
+                    <div class="public-course-card">
+                        <h4>${course.courseName}</h4>
+                        <p><strong>Code:</strong> ${course.courseCode} | <strong>Credits:</strong> ${course.credits}</p>
+                        <p><strong>Instructor:</strong> ${course.instructor}</p>
+                        <p class="availability" style="color: ${statusColor};">
+                            ${isFull ? '❌ FULL' : `✅ ${availableSeats} seats available`}
+                        </p>
+                    </div>
+                `;
+            }).join('');
+        }
+
         // Login
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -618,24 +781,110 @@
                 const response = await fetch(`${API_URL}/courses`);
                 const courses = await response.json();
                 
-                const container = document.getElementById('coursesList');
-                container.innerHTML = courses.map(course => `
+                displayCourses(courses);
+            } catch (error) {
+                showAlert('Error loading courses', 'error');
+            }
+        }
+
+        // Search Courses Function
+        async function searchCourses() {
+            const searchText = document.getElementById('courseSearchInput').value.toLowerCase().trim();
+            const creditFilter = document.getElementById('creditFilter').value;
+            const availabilityFilter = document.getElementById('availabilityFilter').value;
+
+            try {
+                const response = await fetch(`${API_URL}/courses`);
+                let courses = await response.json();
+
+                // Filter by search text
+                if (searchText) {
+                    courses = courses.filter(course => 
+                        course.courseName.toLowerCase().includes(searchText) ||
+                        course.courseCode.toLowerCase().includes(searchText) ||
+                        course.instructor.toLowerCase().includes(searchText) ||
+                        (course.description && course.description.toLowerCase().includes(searchText))
+                    );
+                }
+
+                // Filter by credits
+                if (creditFilter) {
+                    if (creditFilter === '5') {
+                        courses = courses.filter(course => course.credits >= 5);
+                    } else {
+                        courses = courses.filter(course => course.credits === parseInt(creditFilter));
+                    }
+                }
+
+                // Filter by availability
+                if (availabilityFilter) {
+                    if (availabilityFilter === 'available') {
+                        courses = courses.filter(course => 
+                            course.enrolledStudents.length < course.capacity
+                        );
+                    } else if (availabilityFilter === 'full') {
+                        courses = courses.filter(course => 
+                            course.enrolledStudents.length >= course.capacity
+                        );
+                    }
+                }
+
+                displayCourses(courses);
+            } catch (error) {
+                showAlert('Error searching courses', 'error');
+            }
+        }
+
+        // Clear Search
+        function clearSearch() {
+            document.getElementById('courseSearchInput').value = '';
+            document.getElementById('creditFilter').value = '';
+            document.getElementById('availabilityFilter').value = '';
+            loadCourses();
+        }
+
+        // Display Courses
+        function displayCourses(courses) {
+            const container = document.getElementById('coursesList');
+            
+            if (courses.length === 0) {
+                container.innerHTML = `
+                    <div class="no-results">
+                        <h3>No courses found</h3>
+                        <p>Try adjusting your search criteria</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = courses.map(course => {
+                const availableSeats = course.capacity - course.enrolledStudents.length;
+                const isFull = availableSeats <= 0;
+                const statusColor = isFull ? '#f56565' : availableSeats <= 5 ? '#ed8936' : '#48bb78';
+                
+                return `
                     <div class="course-item">
                         <h3>${course.courseName} (${course.courseCode})</h3>
                         <div class="course-info">
                             <p><strong>Instructor:</strong> ${course.instructor}</p>
                             <p><strong>Credits:</strong> ${course.credits}</p>
-                            <p><strong>Enrolled:</strong> ${course.enrolledStudents.length}/${course.capacity}</p>
+                            <p><strong>Available Seats:</strong> 
+                                <span style="color: ${statusColor}; font-weight: bold;">
+                                    ${availableSeats}/${course.capacity}
+                                    ${isFull ? ' (FULL)' : ''}
+                                </span>
+                            </p>
                             <p>${course.description || 'No description available'}</p>
                         </div>
                         <div class="course-actions">
-                            <button class="btn btn-primary" onclick="enrollCourse('${course._id}')">Enroll</button>
+                            <button class="btn btn-primary" onclick="enrollCourse('${course._id}')" 
+                                ${isFull ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+                                ${isFull ? 'Course Full' : 'Enroll'}
+                            </button>
                         </div>
                     </div>
-                `).join('');
-            } catch (error) {
-                showAlert('Error loading courses', 'error');
-            }
+                `;
+            }).join('');
         }
 
         // Load Enrolled Courses
@@ -646,27 +895,63 @@
                 });
                 const courses = await response.json();
                 
-                const container = document.getElementById('enrolledCoursesList');
-                if (courses.length === 0) {
-                    container.innerHTML = '<p>You are not enrolled in any courses yet.</p>';
-                } else {
-                    container.innerHTML = courses.map(course => `
-                        <div class="course-item">
-                            <h3>${course.courseName} (${course.courseCode})</h3>
-                            <div class="course-info">
-                                <p><strong>Instructor:</strong> ${course.instructor}</p>
-                                <p><strong>Credits:</strong> ${course.credits}</p>
-                                <p>${course.description || 'No description available'}</p>
-                            </div>
-                            <div class="course-actions">
-                                <button class="btn btn-danger" onclick="dropCourse('${course._id}')">Drop Course</button>
-                            </div>
-                        </div>
-                    `).join('');
-                }
+                displayEnrolledCourses(courses);
             } catch (error) {
                 showAlert('Error loading enrolled courses', 'error');
             }
+        }
+
+        // Search My Courses
+        async function searchMyCourses() {
+            const searchText = document.getElementById('myCoursesSearchInput').value.toLowerCase().trim();
+
+            try {
+                const response = await fetch(`${API_URL}/students/courses/enrolled`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                let courses = await response.json();
+
+                if (searchText) {
+                    courses = courses.filter(course => 
+                        course.courseName.toLowerCase().includes(searchText) ||
+                        course.courseCode.toLowerCase().includes(searchText) ||
+                        course.instructor.toLowerCase().includes(searchText)
+                    );
+                }
+
+                displayEnrolledCourses(courses);
+            } catch (error) {
+                showAlert('Error searching courses', 'error');
+            }
+        }
+
+        // Display Enrolled Courses
+        function displayEnrolledCourses(courses) {
+            const container = document.getElementById('enrolledCoursesList');
+            
+            if (courses.length === 0) {
+                container.innerHTML = `
+                    <div class="no-results">
+                        <h3>No enrolled courses found</h3>
+                        <p>Enroll in courses from the "All Courses" tab</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = courses.map(course => `
+                <div class="course-item">
+                    <h3>${course.courseName} (${course.courseCode})</h3>
+                    <div class="course-info">
+                        <p><strong>Instructor:</strong> ${course.instructor}</p>
+                        <p><strong>Credits:</strong> ${course.credits}</p>
+                        <p>${course.description || 'No description available'}</p>
+                    </div>
+                    <div class="course-actions">
+                        <button class="btn btn-danger" onclick="dropCourse('${course._id}')">Drop Course</button>
+                    </div>
+                </div>
+            `).join('');
         }
 
         // Enroll in Course
@@ -753,24 +1038,62 @@
                 const response = await fetch(`${API_URL}/courses`);
                 const courses = await response.json();
                 
-                const container = document.getElementById('adminCoursesList');
-                container.innerHTML = courses.map(course => `
-                    <div class="course-item">
-                        <h3>${course.courseName} (${course.courseCode})</h3>
-                        <div class="course-info">
-                            <p><strong>Instructor:</strong> ${course.instructor}</p>
-                            <p><strong>Credits:</strong> ${course.credits}</p>
-                            <p><strong>Enrolled:</strong> ${course.enrolledStudents.length}/${course.capacity}</p>
-                            <p>${course.description || 'No description available'}</p>
-                        </div>
-                        <div class="course-actions">
-                            <button class="btn btn-danger" onclick="deleteCourse('${course._id}')">Delete Course</button>
-                        </div>
-                    </div>
-                `).join('');
+                displayAdminCourses(courses);
             } catch (error) {
                 showAlert('Error loading courses', 'error');
             }
+        }
+
+        // Search Admin Courses
+        async function searchAdminCourses() {
+            const searchText = document.getElementById('adminSearchInput').value.toLowerCase().trim();
+
+            try {
+                const response = await fetch(`${API_URL}/courses`);
+                let courses = await response.json();
+
+                if (searchText) {
+                    courses = courses.filter(course => 
+                        course.courseName.toLowerCase().includes(searchText) ||
+                        course.courseCode.toLowerCase().includes(searchText) ||
+                        course.instructor.toLowerCase().includes(searchText)
+                    );
+                }
+
+                displayAdminCourses(courses);
+            } catch (error) {
+                showAlert('Error searching courses', 'error');
+            }
+        }
+
+        // Display Admin Courses
+        function displayAdminCourses(courses) {
+            const container = document.getElementById('adminCoursesList');
+            
+            if (courses.length === 0) {
+                container.innerHTML = `
+                    <div class="no-results">
+                        <h3>No courses found</h3>
+                        <p>Create your first course above</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = courses.map(course => `
+                <div class="course-item">
+                    <h3>${course.courseName} (${course.courseCode})</h3>
+                    <div class="course-info">
+                        <p><strong>Instructor:</strong> ${course.instructor}</p>
+                        <p><strong>Credits:</strong> ${course.credits}</p>
+                        <p><strong>Enrolled:</strong> ${course.enrolledStudents.length}/${course.capacity}</p>
+                        <p>${course.description || 'No description available'}</p>
+                    </div>
+                    <div class="course-actions">
+                        <button class="btn btn-danger" onclick="deleteCourse('${course._id}')">Delete Course</button>
+                    </div>
+                </div>
+            `).join('');
         }
 
         // Delete Course
