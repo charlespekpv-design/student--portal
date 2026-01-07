@@ -24,7 +24,7 @@ let coursesCollection;
 // Connect to MongoDB
 MongoClient.connect(MONGODB_URI)
   .then(client => {
-    console.log('✅ Connected to MongoDB - Student Portal');
+    console.log('Connected to MongoDB - Student Portal');
     db = client.db(DB_NAME);
     studentsCollection = db.collection('students');
     coursesCollection = db.collection('courses');
@@ -35,7 +35,7 @@ MongoClient.connect(MONGODB_URI)
     coursesCollection.createIndex({ courseCode: 1 }, { unique: true });
   })
   .catch(err => {
-    console.error('❌ MongoDB connection error:', err);
+    console.error('MongoDB connection error:', err);
     process.exit(1);
   });
 
