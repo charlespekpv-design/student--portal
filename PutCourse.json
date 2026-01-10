@@ -1,0 +1,42 @@
+Method: GET
+URL: https://nc7g6nck-3000.asse.devtunnels.ms/api/courses
+
+{
+  "_id": "6959cdf1ceff151845b1e44d",  ← Copy this
+  "courseCode": "CS101",
+  "courseName": "Introduction to Computer Science"
+}
+
+1. **Method**: `PUT`
+2. **URL**:
+https://nc7g6nck-3000.asse.devtunnels.ms/api/courses/6959cdf1ceff151845b1e44d
+
+
+Click "HEADERS" tab → "+ ADD":
+Name: Content-Type
+Value: application/json
+
+Add Request Body (Modified Data)
+Click "BODY" section and paste:
+{
+  "courseCode": "CS101",
+  "courseName": "Advanced Computer Science",
+  "instructor": "Dr. Anderson",
+  "credits": 4,
+  "description": "Updated description with advanced topics",
+  "capacity": 40
+}
+
+expected Response:
+{
+  "message": "Course updated successfully",
+  "course": {
+    "_id": "6959cdf1ceff151845b1e44d",
+    "courseCode": "CS101",
+    "courseName": "Advanced Computer Science",
+    "instructor": "Dr. Anderson",
+    "credits": 4,
+    "description": "Updated description with advanced topics",
+    "capacity": 40
+  }
+}

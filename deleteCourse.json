@@ -1,0 +1,23 @@
+OST
+URL: https://nc7g6nck-3000.asse.devtunnels.ms/api/students/login
+
+Headers:
+  Content-Type: application/json
+
+Body:
+{
+  "email": "john@example.com",
+  "password": "password123"
+}
+
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+
+Delete Course with Authentication**
+```
+Method: DELETE
+URL: https://nc7g6nck-3000.asse.devtunnels.ms/api/courses/6959cdf1ceff151845b1e44d
+
+Headers:
+  Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...

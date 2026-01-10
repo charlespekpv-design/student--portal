@@ -1,0 +1,55 @@
+// POST
+
+https://nc7g6nck-3000.asse.devtunnels.ms/api/courses
+
+Click "HEADERS" tab
+Click "+ ADD"
+Add Header:
+
+Name: Content-Type
+Value: application/json
+Click "BODY" tab
+
+{
+  "courseCode": "CS101",
+  "courseName": "Introduction to Computer Science",
+  "instructor": "Dr. Smith",
+  "credits": 3,
+  "description": "Learn the fundamentals of computer science and programming",
+  "capacity": 30
+}
+
+{
+  "courseCode": "MATH201",
+  "courseName": "Calculus II",
+  "instructor": "Prof. Johnson",
+  "credits": 4,
+  "description": "Advanced calculus including integration techniques and applications",
+  "capacity": 25
+}
+
+{
+  "courseCode": "BUS301",
+  "courseName": "Business Management",
+  "instructor": "Dr. Williams",
+  "credits": 3,
+  "description": "Principles of business management and organizational behavior",
+  "capacity": 40
+}
+{
+  "courseCode": "CS202",
+  "courseName": "Data Structures and Algorithms",
+  "instructor": "Dr. Chen",
+  "credits": 4,
+  "description": "Study of fundamental data structures and algorithm design",
+  "capacity": 35
+}
+
+{
+  "courseCode": "ENG150",
+  "courseName": "English Literature",
+  "instructor": "Prof. Davis",
+  "credits": 3,
+  "description": "Exploration of classic and contemporary English literature",
+  "capacity": 20
+}
