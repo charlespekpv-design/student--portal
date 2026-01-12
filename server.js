@@ -1,595 +1,534 @@
+require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
+const { MongoClient, ObjectId } = require('mongodb');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-this';
 
 // Middleware
-app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+app.use(express.static(__dirname));
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/coursesDB';
+const MONGODB_URI = process.env.MONGODB_URI;
+const DB_NAME = process.env.DB_NAME || 'studentPortal';
 
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ Connected to MongoDB'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+// Check if required environment variables are set
+if (!MONGODB_URI) {
+  console.error('❌ ERROR: MONGODB_URI is not defined in .env file');
+  process.exit(1);
+}
 
-// ============================================
-// SCHEMAS
-// ============================================
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️  WARNING: Using default JWT_SECRET. Please set JWT_SECRET in .env file');
+}
 
-// User Schema
-const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: true
-  },
-  name: String,
-  role: {
-    type: String,
-    enum: ['student', 'instructor', 'admin'],
-    default: 'student'
-  }
-}, {
-  timestamps: true
-});
+let db;
+let studentsCollection;
+let coursesCollection;
 
-// Course Schema
-const courseSchema = new mongoose.Schema({
-  courseCode: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    uppercase: true
-  },
-  courseName: {
-    type: String,
-    required: true
-  },
-  credits: {
-    type: Number,
-    default: 3
-  },
-  department: String,
-  instructor: String,
-  description: String
-}, {
-  timestamps: true
-});
-
-const User = mongoose.model('User', userSchema);
-const Course = mongoose.model('Course', courseSchema);
-
-// ============================================
-// AUTH MIDDLEWARE
-// ============================================
-
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      error: 'Access token required'
-    });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({
-        success: false,
-        error: 'Invalid or expired token'
-      });
-    }
-    req.user = user;
-    next();
+// Connect to MongoDB
+MongoClient.connect(MONGODB_URI)
+  .then(client => {
+    console.log('✅ Connected to MongoDB - Student Portal');
+    db = client.db(DB_NAME);
+    studentsCollection = db.collection('students');
+    coursesCollection = db.collection('courses');
+    
+    // Create indexes for better performance
+    studentsCollection.createIndex({ email: 1 }, { unique: true });
+    studentsCollection.createIndex({ studentId: 1 }, { unique: true });
+    coursesCollection.createIndex({ courseCode: 1 }, { unique: true });
+  })
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
   });
+
+// Auth Middleware
+const authMiddleware = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.studentId = decoded.id;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
 };
 
-// ============================================
-// ROUTES
-// ============================================
-
-// Health check
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Course API Server with Authentication',
-    endpoints: {
-      auth: {
-        'POST /api/register': 'Register new user',
-        'POST /api/login': 'Login user',
-        'GET /api/me': 'Get current user (requires token)'
-      },
-      courses: {
-        'GET /api/courses': 'Get all courses',
-        'GET /api/courses/:id': 'Get course by ID',
-        'GET /api/courses/code/:courseCode': 'Get course by course code',
-        'POST /api/courses': 'Create a new course',
-        'PUT /api/courses/:id': 'Update course by ID',
-        'PUT /api/courses/code/:courseCode': 'Update course by course code',
-        'DELETE /api/courses/:id': 'Delete course by ID',
-        'DELETE /api/courses/code/:courseCode': 'Delete course by course code'
-      }
-    }
-  });
-});
-
-// ============================================
-// AUTH ROUTES
-// ============================================
-
-// Register new user
-app.post('/api/register', async (req, res) => {
+// Optional Auth Middleware (for DELETE endpoints)
+const optionalAuthMiddleware = async (req, res, next) => {
   try {
-    const { email, password, name, role } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and password are required'
-      });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (token) {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.studentId = decoded.id;
     }
+    next();
+  } catch (err) {
+    // Continue without authentication
+    next();
+  }
+};
 
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        error: 'Password must be at least 6 characters'
-      });
-    }
+// ===== STUDENT ROUTES =====
 
-    // Check if user exists
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        error: 'User with this email already exists'
-      });
+// Student Registration
+app.post('/api/students/register', async (req, res) => {
+  try {
+    const { name, email, password, studentId } = req.body;
+
+    // Check if student exists
+    const existingStudent = await studentsCollection.findOne({
+      $or: [{ email }, { studentId }]
+    });
+    
+    if (existingStudent) {
+      return res.status(400).json({ error: 'Student already exists' });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
-    const newUser = new User({
-      email: email.toLowerCase(),
-      password: hashedPassword,
+    // Create student
+    const student = {
       name,
-      role: role || 'student'
-    });
+      email,
+      password: hashedPassword,
+      studentId,
+      enrolledCourses: [],
+      createdAt: new Date()
+    };
 
-    await newUser.save();
+    const result = await studentsCollection.insertOne(student);
+    student._id = result.insertedId;
 
     // Generate token
-    const token = jwt.sign(
-      { userId: newUser._id, email: newUser.email, role: newUser.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    const token = jwt.sign({ id: student._id.toString() }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({
-      success: true,
-      message: 'User registered successfully',
+      message: 'Student registered successfully',
       token,
-      user: {
-        id: newUser._id,
-        email: newUser.email,
-        name: newUser.name,
-        role: newUser.role
+      student: {
+        id: student._id,
+        name: student.name,
+        email: student.email,
+        studentId: student.studentId
       }
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error during registration',
-      message: error.message
-    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Login
-app.post('/api/login', async (req, res) => {
+// Student Login
+app.post('/api/students/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and password are required'
-      });
-    }
-
-    // Find user
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
-      });
+    // Find student
+    const student = await studentsCollection.findOne({ email });
+    if (!student) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
-      });
+    const isValid = await bcrypt.compare(password, student.password);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Generate token
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    const token = jwt.sign({ id: student._id.toString() }, JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
-      success: true,
       message: 'Login successful',
       token,
-      user: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        role: user.role
+      student: {
+        id: student._id,
+        name: student.name,
+        email: student.email,
+        studentId: student.studentId
       }
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error during login',
-      message: error.message
-    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Get current user (protected route)
-app.get('/api/me', authenticateToken, async (req, res) => {
+// Get Student Profile
+app.get('/api/students/profile', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('-password');
+    const student = await studentsCollection.findOne(
+      { _id: new ObjectId(req.studentId) },
+      { projection: { password: 0 } }
+    );
     
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
     }
 
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        createdAt: user.createdAt
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error',
-      message: error.message
-    });
-  }
-});
-
-// ============================================
-// COURSE ROUTES
-// ============================================
-
-// Get all courses
-app.get('/api/courses', async (req, res) => {
-  try {
-    const { courseCode, department, instructor } = req.query;
-    const filter = {};
-    
-    if (courseCode) filter.courseCode = courseCode.toUpperCase();
-    if (department) filter.department = department;
-    if (instructor) filter.instructor = instructor;
-    
-    const courses = await Course.find(filter);
-    res.json({
-      success: true,
-      count: courses.length,
-      data: courses
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while fetching courses',
-      message: error.message
-    });
-  }
-});
-
-// Get course by MongoDB ObjectId
-app.get('/api/courses/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid ID format'
-      });
+    // Get enrolled courses details
+    if (student.enrolledCourses && student.enrolledCourses.length > 0) {
+      const courseIds = student.enrolledCourses.map(id => new ObjectId(id));
+      student.enrolledCourses = await coursesCollection.find({
+        _id: { $in: courseIds }
+      }).toArray();
     }
-    
-    const course = await Course.findById(id);
-    
-    if (!course) {
-      return res.status(404).json({
-        success: false,
-        error: 'Course not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: course
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while fetching course',
-      message: error.message
-    });
+
+    res.json(student);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Get course by course code
-app.get('/api/courses/code/:courseCode', async (req, res) => {
+// Update Student Profile
+app.put('/api/students/profile', authMiddleware, async (req, res) => {
   try {
-    const { courseCode } = req.params;
-    const course = await Course.findOne({ courseCode: courseCode.toUpperCase() });
+    const { name, email } = req.body;
     
-    if (!course) {
-      return res.status(404).json({
-        success: false,
-        error: `Course with code ${courseCode} not found`
-      });
+    const result = await studentsCollection.findOneAndUpdate(
+      { _id: new ObjectId(req.studentId) },
+      { $set: { name, email } },
+      { returnDocument: 'after', projection: { password: 0 } }
+    );
+
+    if (!result.value) {
+      return res.status(404).json({ error: 'Student not found' });
     }
-    
-    res.json({
-      success: true,
-      data: course
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while fetching course',
-      message: error.message
-    });
+
+    res.json(result.value);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Create a new course
+// Get All Students
+app.get('/api/students', async (req, res) => {
+  try {
+    const students = await studentsCollection.find(
+      {},
+      { projection: { password: 0 } }
+    ).toArray();
+    
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete Student (Optional auth - public delete allowed)
+app.delete('/api/students/:id', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const studentId = new ObjectId(req.params.id);
+    
+    const result = await studentsCollection.findOneAndDelete({ _id: studentId });
+    
+    if (!result.value) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    // Remove student from all enrolled courses
+    await coursesCollection.updateMany(
+      { enrolledStudents: req.params.id },
+      { $pull: { enrolledStudents: req.params.id } }
+    );
+
+    res.json({ message: 'Student deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== COURSE ROUTES =====
+
+// Create Course
 app.post('/api/courses', async (req, res) => {
   try {
-    const { courseCode, courseName, credits, department, instructor, description } = req.body;
-    
-    if (!courseCode || !courseName) {
-      return res.status(400).json({
-        success: false,
-        error: 'courseCode and courseName are required'
-      });
-    }
-    
-    const existingCourse = await Course.findOne({ courseCode: courseCode.toUpperCase() });
-    if (existingCourse) {
-      return res.status(409).json({
-        success: false,
-        error: `Course with code ${courseCode} already exists`
-      });
-    }
-    
-    const newCourse = new Course({
-      courseCode: courseCode.toUpperCase(),
+    const { courseCode, courseName, instructor, credits, description, capacity } = req.body;
+
+    const course = {
+      courseCode,
       courseName,
-      credits: credits || 3,
-      department,
       instructor,
-      description
-    });
-    
-    const savedCourse = await newCourse.save();
-    
-    res.status(201).json({
-      success: true,
-      message: 'Course created successfully',
-      data: savedCourse
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while creating course',
-      message: error.message
-    });
+      credits,
+      description,
+      capacity: capacity || 30,
+      enrolledStudents: [],
+      createdAt: new Date()
+    };
+
+    const result = await coursesCollection.insertOne(course);
+    course._id = result.insertedId;
+
+    res.status(201).json({ message: 'Course created successfully', course });
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Course code already exists' });
+    }
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Update course by MongoDB ObjectId
+// Get All Courses with Search Query Support
+app.get('/api/courses', async (req, res) => {
+  try {
+    const { search, credits, instructor, courseCode } = req.query;
+    let query = {};
+
+    // Build search query
+    if (search) {
+      query.$or = [
+        { courseName: { $regex: search, $options: 'i' } },
+        { courseCode: { $regex: search, $options: 'i' } },
+        { instructor: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (credits) {
+      query.credits = parseInt(credits);
+    }
+
+    if (instructor) {
+      query.instructor = { $regex: instructor, $options: 'i' };
+    }
+
+    if (courseCode) {
+      query.courseCode = { $regex: courseCode, $options: 'i' };
+    }
+
+    const courses = await coursesCollection.find(query).toArray();
+    
+    // Populate enrolled students
+    for (let course of courses) {
+      if (course.enrolledStudents && course.enrolledStudents.length > 0) {
+        const studentIds = course.enrolledStudents.map(id => new ObjectId(id));
+        course.enrolledStudents = await studentsCollection.find(
+          { _id: { $in: studentIds } },
+          { projection: { name: 1, email: 1, studentId: 1 } }
+        ).toArray();
+      }
+    }
+
+    res.json(courses);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Single Course
+app.get('/api/courses/:id', async (req, res) => {
+  try {
+    const course = await coursesCollection.findOne({ _id: new ObjectId(req.params.id) });
+    
+    if (!course) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+
+    // Populate enrolled students
+    if (course.enrolledStudents && course.enrolledStudents.length > 0) {
+      const studentIds = course.enrolledStudents.map(id => new ObjectId(id));
+      course.enrolledStudents = await studentsCollection.find(
+        { _id: { $in: studentIds } },
+        { projection: { name: 1, email: 1, studentId: 1 } }
+      ).toArray();
+    }
+
+    res.json(course);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Course
 app.put('/api/courses/:id', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { courseCode, courseName, instructor, credits, description, capacity } = req.body;
     
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid ID format'
-      });
-    }
-    
-    const { courseCode, ...updateData } = req.body;
-    
-    const updatedCourse = await Course.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
+    const result = await coursesCollection.findOneAndUpdate(
+      { _id: new ObjectId(req.params.id) },
+      { 
+        $set: { 
+          courseCode, 
+          courseName, 
+          instructor, 
+          credits, 
+          description, 
+          capacity 
+        } 
+      },
+      { returnDocument: 'after' }
     );
-    
-    if (!updatedCourse) {
-      return res.status(404).json({
-        success: false,
-        error: 'Course not found'
-      });
+
+    if (!result.value) {
+      return res.status(404).json({ error: 'Course not found' });
     }
-    
-    res.json({
-      success: true,
-      message: 'Course updated successfully',
-      data: updatedCourse
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while updating course',
-      message: error.message
-    });
+
+    res.json({ message: 'Course updated successfully', course: result.value });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Update course by course code
-app.put('/api/courses/code/:courseCode', async (req, res) => {
+// Delete Course (Optional auth - public delete allowed)
+app.delete('/api/courses/:id', optionalAuthMiddleware, async (req, res) => {
   try {
-    const { courseCode } = req.params;
-    const { courseCode: newCode, ...updateData } = req.body;
+    const courseId = new ObjectId(req.params.id);
     
-    const updatedCourse = await Course.findOneAndUpdate(
-      { courseCode: courseCode.toUpperCase() },
-      updateData,
-      { new: true, runValidators: true }
+    const result = await coursesCollection.findOneAndDelete({ _id: courseId });
+    
+    if (!result.value) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+
+    // Remove course from all enrolled students
+    await studentsCollection.updateMany(
+      { enrolledCourses: req.params.id },
+      { $pull: { enrolledCourses: req.params.id } }
     );
-    
-    if (!updatedCourse) {
-      return res.status(404).json({
-        success: false,
-        error: `Course with code ${courseCode} not found`
-      });
-    }
-    
-    res.json({
-      success: true,
-      message: 'Course updated successfully',
-      data: updatedCourse
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while updating course',
-      message: error.message
-    });
+
+    res.json({ message: 'Course deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Delete course by MongoDB ObjectId
-app.delete('/api/courses/:id', async (req, res) => {
+// ===== ENROLLMENT ROUTES =====
+
+// Enroll in Course
+app.post('/api/courses/:id/enroll', authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid ID format'
-      });
+    const courseId = req.params.id;
+    const studentId = req.studentId;
+
+    const course = await coursesCollection.findOne({ _id: new ObjectId(courseId) });
+    const student = await studentsCollection.findOne({ _id: new ObjectId(studentId) });
+
+    if (!course) {
+      return res.status(404).json({ error: 'Course not found' });
     }
-    
-    const deletedCourse = await Course.findByIdAndDelete(id);
-    
-    if (!deletedCourse) {
-      return res.status(404).json({
-        success: false,
-        error: 'Course not found'
-      });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
     }
-    
-    res.json({
-      success: true,
-      message: 'Course deleted successfully',
-      data: deletedCourse
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while deleting course',
-      message: error.message
-    });
+
+    // Check if already enrolled
+    if (student.enrolledCourses && student.enrolledCourses.includes(courseId)) {
+      return res.status(400).json({ error: 'Already enrolled in this course' });
+    }
+
+    // Check capacity
+    const enrolledCount = course.enrolledStudents ? course.enrolledStudents.length : 0;
+    if (enrolledCount >= course.capacity) {
+      return res.status(400).json({ error: 'Course is full' });
+    }
+
+    // Enroll student
+    await coursesCollection.updateOne(
+      { _id: new ObjectId(courseId) },
+      { $push: { enrolledStudents: studentId } }
+    );
+
+    await studentsCollection.updateOne(
+      { _id: new ObjectId(studentId) },
+      { $push: { enrolledCourses: courseId } }
+    );
+
+    res.json({ message: 'Enrolled successfully', course });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Delete course by course code
-app.delete('/api/courses/code/:courseCode', async (req, res) => {
+// Drop Course
+app.post('/api/courses/:id/drop', authMiddleware, async (req, res) => {
   try {
-    const { courseCode } = req.params;
+    const courseId = req.params.id;
+    const studentId = req.studentId;
+
+    const course = await coursesCollection.findOne({ _id: new ObjectId(courseId) });
     
-    const deletedCourse = await Course.findOneAndDelete({ 
-      courseCode: courseCode.toUpperCase() 
-    });
-    
-    if (!deletedCourse) {
-      return res.status(404).json({
-        success: false,
-        error: `Course with code ${courseCode} not found`
-      });
+    if (!course) {
+      return res.status(404).json({ error: 'Course not found' });
     }
-    
-    res.json({
-      success: true,
-      message: 'Course deleted successfully',
-      data: deletedCourse
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Server error while deleting course',
-      message: error.message
-    });
+
+    // Remove student from course
+    await coursesCollection.updateOne(
+      { _id: new ObjectId(courseId) },
+      { $pull: { enrolledStudents: studentId } }
+    );
+
+    await studentsCollection.updateOne(
+      { _id: new ObjectId(studentId) },
+      { $pull: { enrolledCourses: courseId } }
+    );
+
+    res.json({ message: 'Dropped course successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// ============================================
-// ERROR HANDLERS
-// ============================================
+// Get Student's Enrolled Courses
+app.get('/api/students/courses/enrolled', authMiddleware, async (req, res) => {
+  try {
+    const student = await studentsCollection.findOne({ _id: new ObjectId(req.studentId) });
+    
+    if (!student || !student.enrolledCourses || student.enrolledCourses.length === 0) {
+      return res.json([]);
+    }
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Route not found',
-    message: `Cannot ${req.method} ${req.path}`
+    const courseIds = student.enrolledCourses.map(id => new ObjectId(id));
+    const courses = await coursesCollection.find({ _id: { $in: courseIds } }).toArray();
+    
+    res.json(courses);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Root route
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
+app.get('/api', (req, res) => {
+  res.json({
+    message: 'Student Portal API',
+    endpoints: {
+      students: {
+        register: 'POST /api/students/register',
+        login: 'POST /api/students/login',
+        profile: 'GET /api/students/profile (auth)',
+        updateProfile: 'PUT /api/students/profile (auth)',
+        getAll: 'GET /api/students',
+        delete: 'DELETE /api/students/:id (optional auth)'
+      },
+      courses: {
+        create: 'POST /api/courses',
+        getAll: 'GET /api/courses',
+        getOne: 'GET /api/courses/:id',
+        update: 'PUT /api/courses/:id',
+        delete: 'DELETE /api/courses/:id (optional auth)',
+        enroll: 'POST /api/courses/:id/enroll (auth)',
+        drop: 'POST /api/courses/:id/drop (auth)',
+        enrolled: 'GET /api/students/courses/enrolled (auth)'
+      }
+    }
   });
 });
 
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    success: false,
-    error: 'Something went wrong!',
-    message: err.message
-  });
-});
-
-// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-  console.log(`📍 Local: http://localhost:${PORT}`);
-  console.log(`📚 API Docs: http://localhost:${PORT}/`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📚 Visit http://localhost:${PORT} to access the Student Portal`);
 });
-
-module.exports = app;
