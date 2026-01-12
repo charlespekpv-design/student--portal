@@ -2,7 +2,7 @@ Method: GET
 URL: https://nc7g6nck-3000.asse.devtunnels.ms/api/courses
 
 {
-  "_id": "6959cdf1ceff151845b1e44d",  ← Copy this
+  "_id": "6959cdf1ceff151845b1e44d",  
   "courseCode": "CS101",
   "courseName": "Introduction to Computer Science"
 }

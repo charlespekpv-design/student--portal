@@ -11,7 +11,7 @@ Value: application/json
 Click "BODY" tab
 
 {
-  "courseCode": "CS101",
+  "courseCode": "CS1011",
   "courseName": "Introduction to Computer Science",
   "instructor": "Dr. Smith",
   "credits": 3,
