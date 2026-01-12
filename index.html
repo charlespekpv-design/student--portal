@@ -246,7 +246,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1> Student Portal</h1>
+            <h1>🎓 Student Portal</h1>
             <div class="user-info">
                 <span id="sessionTimer" class="session-timer hidden"></span>
                 <span id="userDisplay" class="hidden"></span>
@@ -268,14 +268,36 @@
                         <input type="text" id="publicSearchInput" placeholder="Search courses by name, code, or instructor...">
                     </div>
                     
-                    
+                    <div class="grid-2" style="margin-bottom: 15px;">
+                        <div class="form-group">
+                            <select id="publicCreditFilter">
+                                <option value="">All Credits</option>
+                                <option value="1">1 Credit</option>
+                                <option value="2">2 Credits</option>
+                                <option value="3">3 Credits</option>
+                                <option value="4">4 Credits</option>
+                                <option value="5">5+ Credits</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <select id="publicAvailabilityFilter">
+                                <option value="">All Availability</option>
+                                <option value="available">Available</option>
+                                <option value="full">Full</option>
+                            </select>
+                        </div>
+                    </div>
                     
                     <div style="display: flex; gap: 10px; margin-bottom: 20px;">
                         <button class="btn btn-primary" onclick="searchPublicCourses()" style="flex: 1;">Search Courses</button>
                         <button class="btn btn-secondary" onclick="clearPublicSearch()">Clear</button>
                     </div>
                     
-                    <div id="publicCoursesList" style="max-height: 500px; overflow-y: auto;"></div>
+                    <div id="publicCoursesList" style="max-height: 500px; overflow-y: auto;">
+                        <p style="text-align: center; color: #718096; padding: 20px;">
+                            Loading courses...
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Login / Register -->
@@ -539,14 +561,33 @@
 
         // PUBLIC COURSE SEARCH (Before Login)
         async function loadPublicCourses() {
+            const container = document.getElementById('publicCoursesList');
+            
             try {
+                container.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">Loading courses...</p>';
+                
                 const response = await fetch(`${API_URL}/courses`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const courses = await response.json();
+                console.log('Loaded courses:', courses); // Debug log
+                
                 displayPublicCourses(courses);
             } catch (error) {
                 console.error('Error loading public courses:', error);
-                document.getElementById('publicCoursesList').innerHTML = 
-                    '<p style="color: #718096; text-align: center;">Unable to load courses. Please try again later.</p>';
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #f56565;">
+                        <p><strong>Unable to load courses</strong></p>
+                        <p style="font-size: 14px;">Error: ${error.message}</p>
+                        <p style="font-size: 12px; color: #718096;">Make sure your server is running on port 3000</p>
+                        <button class="btn btn-primary" onclick="loadPublicCourses()" style="margin-top: 10px;">
+                            Retry
+                        </button>
+                    </div>
+                `;
             }
         }
 
@@ -607,17 +648,22 @@
         function displayPublicCourses(courses) {
             const container = document.getElementById('publicCoursesList');
             
-            if (courses.length === 0) {
+            console.log('Displaying courses:', courses); // Debug log
+            
+            if (!courses || courses.length === 0) {
                 container.innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #718096;">
-                        <p>No courses found matching your criteria.</p>
+                    <div style="text-align: center; padding: 30px; color: #718096;">
+                        <h3 style="color: #4a5568; margin-bottom: 10px;">📚 No courses available yet</h3>
+                        <p>Courses will appear here once they are added to the system.</p>
+                        <p style="font-size: 12px; margin-top: 10px;">Contact your administrator to add courses.</p>
                     </div>
                 `;
                 return;
             }
 
             container.innerHTML = courses.map(course => {
-                const availableSeats = course.capacity - course.enrolledStudents.length;
+                const enrolledCount = course.enrolledStudents ? course.enrolledStudents.length : 0;
+                const availableSeats = course.capacity - enrolledCount;
                 const isFull = availableSeats <= 0;
                 const statusColor = isFull ? '#f56565' : availableSeats <= 5 ? '#ed8936' : '#48bb78';
                 
@@ -626,8 +672,9 @@
                         <h4>${course.courseName}</h4>
                         <p><strong>Code:</strong> ${course.courseCode} | <strong>Credits:</strong> ${course.credits}</p>
                         <p><strong>Instructor:</strong> ${course.instructor}</p>
+                        ${course.description ? `<p style="font-size: 12px; margin-top: 5px;">${course.description}</p>` : ''}
                         <p class="availability" style="color: ${statusColor};">
-                            ${isFull ? 'FULL' : `${availableSeats} seats available`}
+                            ${isFull ? '❌ FULL' : `✅ ${availableSeats} seats available`}
                         </p>
                     </div>
                 `;
