@@ -8,6 +8,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-this';
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY; // Add this
 
 // Middleware
 app.use(express.json());
@@ -26,6 +27,10 @@ if (!MONGODB_URI) {
 
 if (!process.env.JWT_SECRET) {
   console.warn('⚠️  WARNING: Using default JWT_SECRET. Please set JWT_SECRET in .env file');
+}
+
+if (!GOOGLE_API_KEY) {
+  console.warn('⚠️  WARNING: GOOGLE_API_KEY not set. AI search features will be disabled.');
 }
 
 let db;
@@ -62,21 +67,6 @@ const authMiddleware = async (req, res, next) => {
     next();
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-// Optional Auth Middleware (for DELETE endpoints)
-const optionalAuthMiddleware = async (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      req.studentId = decoded.id;
-    }
-    next();
-  } catch (err) {
-    // Continue without authentication
-    next();
   }
 };
 
@@ -226,8 +216,8 @@ app.get('/api/students', async (req, res) => {
   }
 });
 
-// Delete Student (Optional auth - public delete allowed)
-app.delete('/api/students/:id', optionalAuthMiddleware, async (req, res) => {
+// Delete Student (Admin function - requires authentication)
+app.delete('/api/students/:id', authMiddleware, async (req, res) => {
   try {
     const studentId = new ObjectId(req.params.id);
     
@@ -326,6 +316,131 @@ app.get('/api/courses', async (req, res) => {
   }
 });
 
+// AI-Powered Course Search (Natural Language)
+app.post('/api/courses/ai-search', async (req, res) => {
+  try {
+    const { query } = req.body;
+
+    if (!GOOGLE_API_KEY) {
+      return res.status(503).json({ 
+        error: 'AI search is not configured. Please set GOOGLE_API_KEY in environment variables.' 
+      });
+    }
+
+    if (!query) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+
+    // Get all courses
+    const allCourses = await coursesCollection.find({}).toArray();
+
+    // Prepare course data for AI
+    const coursesText = allCourses.map(c => 
+      `${c.courseCode}: ${c.courseName} by ${c.instructor}, ${c.credits} credits, ${c.description || 'No description'}`
+    ).join('\n');
+
+    // Call Google Gemini API
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GOOGLE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are a course search assistant. Based on this query: "${query}"
+              
+Available courses:
+${coursesText}
+
+Return ONLY a JSON array of course codes that match the query. Format: ["CODE1", "CODE2"]
+If no courses match, return an empty array: []
+
+Examples:
+- "programming courses" -> ["CS101", "CS202"]
+- "3 credit courses" -> ["CS101", "BUS301"]
+- "Dr. Smith" -> ["CS101"]`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            topK: 1,
+            topP: 1,
+          }
+        })
+      }
+    );
+
+    const aiResult = await geminiResponse.json();
+    
+    // Log full response for debugging
+    console.log('Gemini API Response:', JSON.stringify(aiResult, null, 2));
+    
+    if (aiResult.error) {
+      throw new Error(`Gemini API Error: ${aiResult.error.message || 'Unknown error'}`);
+    }
+    
+    if (!aiResult.candidates || !aiResult.candidates[0]) {
+      throw new Error('No candidates in AI response. Check API key and quota.');
+    }
+
+    // Parse AI response
+    const aiText = aiResult.candidates[0].content.parts[0].text.trim();
+    console.log('AI Response Text:', aiText);
+    
+    let matchedCodes = [];
+    
+    try {
+      // Try to parse as JSON
+      const cleanText = aiText.replace(/```json|```/g, '').trim();
+      matchedCodes = JSON.parse(cleanText);
+      console.log('Matched course codes:', matchedCodes);
+    } catch (e) {
+      // Fallback: extract course codes manually
+      console.log('Failed to parse AI response as JSON:', e.message);
+      console.log('Using fallback method');
+      matchedCodes = [];
+    }
+
+    // Filter courses based on AI results
+    let filteredCourses;
+    if (matchedCodes.length > 0) {
+      filteredCourses = allCourses.filter(c => matchedCodes.includes(c.courseCode));
+    } else {
+      // Fallback to regular search if AI returns empty
+      const searchRegex = new RegExp(query, 'i');
+      filteredCourses = allCourses.filter(c => 
+        searchRegex.test(c.courseName) ||
+        searchRegex.test(c.courseCode) ||
+        searchRegex.test(c.instructor) ||
+        (c.description && searchRegex.test(c.description))
+      );
+    }
+
+    // Populate enrolled students
+    for (let course of filteredCourses) {
+      if (course.enrolledStudents && course.enrolledStudents.length > 0) {
+        const studentIds = course.enrolledStudents.map(id => new ObjectId(id));
+        course.enrolledStudents = await studentsCollection.find(
+          { _id: { $in: studentIds } },
+          { projection: { name: 1, email: 1, studentId: 1 } }
+        ).toArray();
+      }
+    }
+
+    res.json({
+      query,
+      results: filteredCourses,
+      count: filteredCourses.length,
+      aiPowered: true
+    });
+
+  } catch (err) {
+    console.error('AI Search Error:', err);
+    res.status(500).json({ error: 'AI search failed: ' + err.message });
+  }
+});
+
 // Get Single Course
 app.get('/api/courses/:id', async (req, res) => {
   try {
@@ -380,8 +495,8 @@ app.put('/api/courses/:id', async (req, res) => {
   }
 });
 
-// Delete Course (Optional auth - public delete allowed)
-app.delete('/api/courses/:id', optionalAuthMiddleware, async (req, res) => {
+// Delete Course (Now requires authentication)
+app.delete('/api/courses/:id', authMiddleware, async (req, res) => {
   try {
     const courseId = new ObjectId(req.params.id);
     
@@ -511,15 +626,14 @@ app.get('/api', (req, res) => {
         login: 'POST /api/students/login',
         profile: 'GET /api/students/profile (auth)',
         updateProfile: 'PUT /api/students/profile (auth)',
-        getAll: 'GET /api/students',
-        delete: 'DELETE /api/students/:id (optional auth)'
+        getAll: 'GET /api/students'
       },
       courses: {
         create: 'POST /api/courses',
         getAll: 'GET /api/courses',
         getOne: 'GET /api/courses/:id',
         update: 'PUT /api/courses/:id',
-        delete: 'DELETE /api/courses/:id (optional auth)',
+        delete: 'DELETE /api/courses/:id',
         enroll: 'POST /api/courses/:id/enroll (auth)',
         drop: 'POST /api/courses/:id/drop (auth)',
         enrolled: 'GET /api/students/courses/enrolled (auth)'

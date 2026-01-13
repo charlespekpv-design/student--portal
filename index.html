@@ -265,7 +265,7 @@
                     <p style="color: #718096; margin-bottom: 15px;">Search and explore our course catalog. Login to enroll!</p>
                     
                     <div class="form-group">
-                        <input type="text" id="publicSearchInput" placeholder="Search courses by name, code, or instructor...">
+                        <input type="text" id="publicSearchInput" placeholder="Try: 'programming courses' or '3 credit courses by Dr. Smith'">
                     </div>
                     
                     <div class="grid-2" style="margin-bottom: 15px;">
@@ -289,7 +289,8 @@
                     </div>
                     
                     <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                        <button class="btn btn-primary" onclick="searchPublicCourses()" style="flex: 1;">Search Courses</button>
+                        <button class="btn btn-primary" onclick="searchPublicCourses()" style="flex: 1;">🔍 Search</button>
+                        <button class="btn btn-success" onclick="aiSearchPublicCourses()" style="flex: 1;">✨ AI Search</button>
                         <button class="btn btn-secondary" onclick="clearPublicSearch()">Clear</button>
                     </div>
                     
@@ -643,6 +644,105 @@
             document.getElementById('publicCreditFilter').value = '';
             document.getElementById('publicAvailabilityFilter').value = '';
             loadPublicCourses();
+        }
+
+        // AI-Powered Public Course Search
+        async function aiSearchPublicCourses() {
+            const searchText = document.getElementById('publicSearchInput').value.trim();
+            const container = document.getElementById('publicCoursesList');
+
+            if (!searchText) {
+                showAlert('Please enter a search query for AI search', 'error');
+                return;
+            }
+
+            try {
+                container.innerHTML = '<p style="text-align: center; color: #667eea; padding: 20px;">✨ AI is searching for courses...</p>';
+
+                const response = await fetch(`${API_URL}/courses/ai-search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: searchText })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.error('AI Search API Error:', error);
+                    throw new Error(error.error || 'AI search failed');
+                }
+
+                const data = await response.json();
+                console.log('AI Search results:', data);
+
+                if (data.results && data.results.length > 0) {
+                    container.innerHTML = `
+                        <div style="background: #e6f7ff; padding: 10px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #667eea;">
+                            <strong>✨ AI Search Results</strong>
+                            <p style="margin: 5px 0 0 0; font-size: 14px; color: #4a5568;">
+                                Found ${data.count} ${data.count === 1 ? 'course' : 'courses'} matching "${data.query}"
+                            </p>
+                        </div>
+                    `;
+                    
+                    // Append courses after the header
+                    const coursesHtml = data.results.map(course => {
+                        const enrolledCount = course.enrolledStudents ? course.enrolledStudents.length : 0;
+                        const availableSeats = course.capacity - enrolledCount;
+                        const isFull = availableSeats <= 0;
+                        const statusColor = isFull ? '#f56565' : availableSeats <= 5 ? '#ed8936' : '#48bb78';
+                        
+                        return `
+                            <div class="public-course-card">
+                                <h4>${course.courseName}</h4>
+                                <p><strong>Code:</strong> ${course.courseCode} | <strong>Credits:</strong> ${course.credits}</p>
+                                <p><strong>Instructor:</strong> ${course.instructor}</p>
+                                ${course.description ? `<p style="font-size: 12px; margin-top: 5px;">${course.description}</p>` : ''}
+                                <p class="availability" style="color: ${statusColor};">
+                                    ${isFull ? '❌ FULL' : `✅ ${availableSeats} seats available`}
+                                </p>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    container.innerHTML += coursesHtml;
+                } else {
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 30px; color: #718096;">
+                            <h3 style="color: #4a5568; margin-bottom: 10px;">🤷 No courses found</h3>
+                            <p>AI couldn't find courses matching "${searchText}"</p>
+                            <p style="font-size: 12px; margin-top: 10px;">Try different keywords or use regular search</p>
+                            <button class="btn btn-primary" onclick="searchPublicCourses()" style="margin-top: 15px;">
+                                Try Regular Search
+                            </button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('AI search error:', error);
+                const errorMessage = error.message || 'Unknown error';
+                
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 30px;">
+                        <h3 style="color: #f56565; margin-bottom: 10px;">⚠️ AI Search Error</h3>
+                        <p style="color: #718096; margin-bottom: 15px;">${errorMessage}</p>
+                        <div style="background: #fed7d7; padding: 15px; border-radius: 5px; margin-bottom: 15px; text-align: left;">
+                            <strong>Possible Issues:</strong>
+                            <ul style="margin: 10px 0; padding-left: 20px; color: #742a2a;">
+                                <li>Google API key not configured</li>
+                                <li>API key invalid or expired</li>
+                                <li>Gemini API not enabled</li>
+                                <li>API quota exceeded</li>
+                                <li>Network connection issue</li>
+                            </ul>
+                        </div>
+                        <button class="btn btn-primary" onclick="searchPublicCourses()">
+                            Use Regular Search Instead
+                        </button>
+                    </div>
+                `;
+                
+                showAlert('AI search failed. Check console for details.', 'error');
+            }
         }
 
         function displayPublicCourses(courses) {
